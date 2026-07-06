@@ -19,13 +19,12 @@ const API_BASE = (window.location.port === '3000' || window.location.hostname ==
  * @param {File}   pdfFile     - The uploaded PDF file object
  * @param {File}   rubricFile  - Optional uploaded rubric JSON file object
  * @param {string} examId      - Optional custom exam ID
- * @param {boolean} mock       - Use mock LLM (no API key needed)
  * @param {string} rubricId    - Optional ID of a saved rubric on the backend
  * @param {string} courseId    - Optional ID of a saved course on the backend
  * @param {string} name        - Optional custom exam name
  * @returns {{ exam_id: string, status: string }}
  */
-export async function startPipeline(pdfFile, rubricFile = null, examId = null, mock = false, rubricId = null, courseId = null, name = null) {
+export async function startPipeline(pdfFile, rubricFile = null, examId = null, rubricId = null, courseId = null, name = null) {
   const form = new FormData();
   form.append('pdf',    pdfFile);
   if (rubricFile) form.append('rubric', rubricFile);
@@ -33,7 +32,6 @@ export async function startPipeline(pdfFile, rubricFile = null, examId = null, m
   if (courseId)   form.append('course_id', courseId);
   if (examId) form.append('exam_id', examId);
   if (name)   form.append('name', name);
-  form.append('mock', String(mock));
 
   const res = await fetch(`${API_BASE}/pipeline/start`, {
     method: 'POST',

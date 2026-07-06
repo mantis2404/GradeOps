@@ -17,7 +17,7 @@ export const store = {
   activeExamId: null,
 
   // The currently active course context
-  selectedCourseId: null,
+  selectedCourseId: localStorage.getItem('selectedCourseId') || null,
 
   users: [],
   exams: [],

@@ -28,21 +28,7 @@ from pipeline.config import settings
 from pipeline.schemas.outputs import OCROutput
 from pipeline.state import ExamGradingState, StudentRecord
 
-# ── Mock responses (used when MOCK_LLM=true) ─────────────────────────────────
 
-def _mock_ocr(student_id: str) -> OCROutput:
-    """Deterministic mock OCR response — no API call."""
-    return OCROutput(
-        transcript=(
-            f"[MOCK] Student {student_id} answer: "
-            "QuickSort has average time complexity O(n log n). "
-            "In the worst case it degrades to O(n²) when the pivot is always the extreme element. "
-            "The partition step runs in O(n). "
-            "This satisfies the recurrence T(n) = 2T(n/2) + O(n)."
-        ),
-        confidence=0.95,
-        illegible_regions=[],
-    )
 
 
 # ── Prompt ────────────────────────────────────────────────────────────────────
@@ -151,24 +137,21 @@ def ocr_agent(state: ExamGradingState) -> dict:
 
     students: list[StudentRecord] = list(state["students"])
 
-    if settings.mock_llm:
-        results = [_mock_ocr(s["student_id"]) for s in students]
-    else:
-        from langchain_google_genai import ChatGoogleGenerativeAI
-        model = ChatGoogleGenerativeAI(
-            model=settings.ocr_model,
-            google_api_key=settings.google_api_key,
-            temperature=0,
-        )
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_closed():
-                raise RuntimeError
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+    from langchain_google_genai import ChatGoogleGenerativeAI
+    model = ChatGoogleGenerativeAI(
+        model=settings.ocr_model,
+        google_api_key=settings.google_api_key,
+        temperature=0,
+    )
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            raise RuntimeError
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
 
-        results = loop.run_until_complete(_run_all_ocr(students, model))
+    results = loop.run_until_complete(_run_all_ocr(students, model))
 
     updated = []
     for student, ocr in zip(students, results):

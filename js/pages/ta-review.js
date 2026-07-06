@@ -33,19 +33,28 @@ export async function render(container) {
 
   // No active exam — show empty state with helper tip
   if (!examId) {
+    const isInstructor = store.role === 'instructor';
     container.innerHTML = `
       <h1 class="page-title">Review queue</h1>
       <div class="empty" style="margin-top:80px">
         <i class="ti ti-inbox" aria-hidden="true"></i>
         <p>No active grading session.</p>
-        <p style="font-size:var(--text-sm);color:var(--neutral-400);margin-top:4px">
-          Go to <strong>Upload Exam</strong> to start a new grading run.
-        </p>
-        <button class="btn btn-primary" style="margin-top:16px" id="go-upload">
-          <i class="ti ti-upload" aria-hidden="true"></i> Upload Exam
-        </button>
+        ${isInstructor ? `
+          <p style="font-size:var(--text-sm);color:var(--neutral-400);margin-top:4px">
+            Go to <strong>Upload Exam</strong> to start a new grading run.
+          </p>
+          <button class="btn btn-primary" style="margin-top:16px" id="go-upload">
+            <i class="ti ti-upload" aria-hidden="true"></i> Upload Exam
+          </button>
+        ` : `
+          <p style="font-size:var(--text-sm);color:var(--neutral-400);margin-top:4px">
+            Please wait for your instructor to upload exams and start a grading session.
+          </p>
+        `}
       </div>`;
-    container.querySelector('#go-upload')?.addEventListener('click', () => navigate('upload'));
+    if (isInstructor) {
+      container.querySelector('#go-upload')?.addEventListener('click', () => navigate('upload'));
+    }
     return;
   }
 
@@ -126,6 +135,7 @@ function renderProcessing(container, examId) {
 function renderComplete(container, stats) {
   _cleanupWs();
   store.activeExamId = null;
+  const isInstructor = store.role === 'instructor';
   container.innerHTML = `
     <h1 class="page-title">Review queue</h1>
     <div class="card" style="max-width:500px;margin:60px auto;text-align:center;padding:32px">
@@ -144,16 +154,31 @@ function renderComplete(container, stats) {
         </div>
       </div>
       <div style="display:flex;gap:10px;justify-content:center">
-        <button class="btn btn-primary" id="go-exams">
-          <i class="ti ti-list" aria-hidden="true"></i> View all exams
-        </button>
-        <button class="btn" id="go-reports">
-          <i class="ti ti-chart-bar" aria-hidden="true"></i> View reports
-        </button>
+        ${isInstructor ? `
+          <button class="btn btn-primary" id="go-exams">
+            <i class="ti ti-list" aria-hidden="true"></i> View all exams
+          </button>
+          <button class="btn" id="go-reports">
+            <i class="ti ti-chart-bar" aria-hidden="true"></i> View reports
+          </button>
+        ` : `
+          <button class="btn btn-primary" id="go-dashboard">
+            <i class="ti ti-layout-dashboard" aria-hidden="true"></i> Dashboard
+          </button>
+          <button class="btn" id="go-exams-sheets">
+            <i class="ti ti-files" aria-hidden="true"></i> Exam Sheets
+          </button>
+        `}
       </div>
     </div>`;
-  container.querySelector('#go-exams')?.addEventListener('click', () => navigate('exams'));
-  container.querySelector('#go-reports')?.addEventListener('click', () => navigate('reports'));
+
+  if (isInstructor) {
+    container.querySelector('#go-exams')?.addEventListener('click', () => navigate('exams'));
+    container.querySelector('#go-reports')?.addEventListener('click', () => navigate('reports'));
+  } else {
+    container.querySelector('#go-dashboard')?.addEventListener('click', () => navigate('ta-dashboard'));
+    container.querySelector('#go-exams-sheets')?.addEventListener('click', () => navigate('ta-exams'));
+  }
 }
 
 function renderReviewPanel(container, examId, state) {

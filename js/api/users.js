@@ -9,6 +9,15 @@ const API_BASE = (window.location.port === '3000' || window.location.hostname ==
   ? 'http://localhost:8000' 
   : '';
 
+function mapUserUIProperties(u) {
+  return {
+    ...u,
+    avatar: (u.name || '??').substring(0, 2).toUpperCase(),
+    color: u.role === 'instructor' ? '#E1F5EE' : '#E6F1FB',
+    tc: u.role === 'instructor' ? '#0F6E56' : '#185FA5'
+  };
+}
+
 export async function getUsers() {
   const res = await fetch(`${API_BASE}/auth/users`, {
     headers: getAuthHeaders()
@@ -29,30 +38,16 @@ export async function getUsers() {
   }
   
   const users = await res.json();
-  
-  // Add UI properties for the avatar (color, initials)
-  return users.map(u => ({
-    ...u,
-    avatar: (u.name || '??').substring(0, 2).toUpperCase(),
-    color: u.role === 'instructor' ? '#E1F5EE' : '#E6F1FB',
-    tc: u.role === 'instructor' ? '#0F6E56' : '#185FA5'
-  }));
+  return users.map(mapUserUIProperties);
 }
 
-export async function inviteUser({ email, role }) {
-  // Placeholder for user invitation logic
-  console.log('Inviting user:', email, role);
-  return { email, role };
-}
-
-export async function toggleUserRole(id) {
-  const res = await fetch(`${API_BASE}/auth/users/${id}/toggle-role`, {
-    method: 'POST',
+export async function getCourseMembers(courseId) {
+  const res = await fetch(`${API_BASE}/metadata/courses/id/${courseId}/members`, {
     headers: getAuthHeaders()
   });
-  
+
   if (!res.ok) {
-    let msg = 'Failed to update user role';
+    let msg = 'Failed to fetch course members';
     try {
       const err = await res.json();
       msg = err.detail || msg;
@@ -60,23 +55,64 @@ export async function toggleUserRole(id) {
     throw new Error(msg);
   }
   
+  const members = await res.json();
+  return members.map(mapUserUIProperties);
+}
+
+export async function addCourseMember(courseId, { userId, role }) {
+  const res = await fetch(`${API_BASE}/metadata/courses/id/${courseId}/members`, {
+    method: 'POST',
+    headers: {
+      ...getAuthHeaders(),
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ user_id: userId, role })
+  });
+
+  if (!res.ok) {
+    let msg = 'Failed to add member to course';
+    try {
+      const err = await res.json();
+      msg = err.detail || msg;
+    } catch (e) {}
+    throw new Error(msg);
+  }
+
   return res.json();
 }
 
-export async function removeUser(id) {
-  const res = await fetch(`${API_BASE}/auth/users/${id}`, {
-    method: 'DELETE',
+export async function toggleCourseMemberRole(courseId, userId) {
+  const res = await fetch(`${API_BASE}/metadata/courses/id/${courseId}/members/${userId}/toggle-role`, {
+    method: 'POST',
     headers: getAuthHeaders()
   });
-  
+
   if (!res.ok) {
-    let msg = 'Failed to remove user';
+    let msg = 'Failed to update member role';
     try {
       const err = await res.json();
       msg = err.detail || msg;
     } catch (e) {}
     throw new Error(msg);
   }
-  
+
+  return res.json();
+}
+
+export async function removeCourseMember(courseId, userId) {
+  const res = await fetch(`${API_BASE}/metadata/courses/id/${courseId}/members/${userId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders()
+  });
+
+  if (!res.ok) {
+    let msg = 'Failed to remove member from course';
+    try {
+      const err = await res.json();
+      msg = err.detail || msg;
+    } catch (e) {}
+    throw new Error(msg);
+  }
+
   return res.json();
 }

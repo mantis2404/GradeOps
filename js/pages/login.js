@@ -40,6 +40,7 @@ export async function render(container) {
             <select id="reg-role" class="form-label" style="width:100%; padding:8px; border-radius:var(--radius-sm); border:1px solid var(--neutral-200);">
               <option value="ta">Teaching Assistant (TA)</option>
               <option value="instructor">Instructor</option>
+              <option value="admin">Central Admin</option>
             </select>
           </div>
         ` : ''}

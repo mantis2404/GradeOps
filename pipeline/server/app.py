@@ -85,7 +85,6 @@ def create_app() -> FastAPI:
     async def health():
         return {
             "status": "ok",
-            "mock_llm": settings.mock_llm,
             "grading_model": settings.grading_model,
             "ocr_model": settings.ocr_model,
         }

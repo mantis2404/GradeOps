@@ -92,6 +92,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 
 def check_role(required_role: str):
     async def role_dependency(current_user: UserOut = Depends(get_current_user)):
+        if current_user.role == "admin":
+            return current_user
         if current_user.role != required_role:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -160,7 +162,7 @@ async def toggle_user_role(user_id: str, current_user: UserOut = Depends(check_r
         raise HTTPException(status_code=404, detail="User not found")
     
     new_role = "ta" if user.get("role") == "instructor" else "instructor"
-    await db.users.update_one({"_id": ObjectId(user_id)}, {"": {"role": new_role}})
+    await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": {"role": new_role}})
     return {"status": "success", "new_role": new_role}
 
 @router.delete("/users/{user_id}")

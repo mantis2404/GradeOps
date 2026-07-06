@@ -58,9 +58,6 @@ class Settings(BaseSettings):
     # Max retry attempts on transient API errors (429, 503)
     llm_max_retries: int = Field(default=2, alias="LLM_MAX_RETRIES")
 
-    # ── Dev ───────────────────────────────────────────────────
-    mock_llm: bool = Field(default=False, alias="MOCK_LLM")
-
     # ── Server ────────────────────────────────────────────────
     server_host: str  = Field(default="0.0.0.0",              alias="SERVER_HOST")
     server_port: int  = Field(default=8000,                    alias="SERVER_PORT")

@@ -2,13 +2,43 @@
  * pages/users.js — Manage course members and permissions.
  */
 
-import { getUsers, inviteUser, toggleUserRole, removeUser } from '../api/users.js';
+import { getUsers, getCourseMembers, addCourseMember, toggleCourseMemberRole, removeCourseMember } from '../api/users.js';
 import { showToast } from '../components/toast.js';
+import { store } from '../state.js';
 
 export async function render(container) {
-  const users = await getUsers();
-  const instructors = users.filter(u => u.role === 'instructor');
-  const tas         = users.filter(u => u.role === 'ta');
+  const courseId = store.selectedCourseId;
+
+  if (!courseId) {
+    container.innerHTML = `
+      <div class="page-header">
+        <div class="page-header-left">
+          <h1 class="page-title">Team</h1>
+          <p class="page-sub">Manage course members and permissions</p>
+        </div>
+      </div>
+      <div class="card" style="text-align: center; padding: 40px;">
+        <i class="ti ti-book-off" style="font-size: 48px; color: var(--neutral-400); margin-bottom: 16px; display: block;"></i>
+        <h3>No Course Selected</h3>
+        <p style="color: var(--neutral-600); margin-bottom: 20px;">Please select or create a course in the Course Manager to view and manage its team members.</p>
+      </div>`;
+    return;
+  }
+
+  let members = [];
+  let globalUsers = [];
+  try {
+    members = await getCourseMembers(courseId);
+    globalUsers = await getUsers();
+  } catch (err) {
+    showToast(err.message || 'Failed to load data', 'error');
+  }
+
+  const instructors = members.filter(u => u.role === 'instructor');
+  const tas         = members.filter(u => u.role === 'ta');
+
+  // Find users who are registered globally but not in the active course
+  const assignableUsers = globalUsers.filter(gu => !members.some(cm => cm.id === gu.id));
 
   container.innerHTML = `
     <div class="page-header">
@@ -27,61 +57,91 @@ export async function render(container) {
         <table>
           <thead><tr><th>Name</th><th>Role</th><th></th></tr></thead>
           <tbody>
-            ${users.map(u => userRow(u)).join('')}
+            ${members.length > 0 
+              ? members.map(u => userRow(u)).join('')
+              : `<tr><td colspan="3" style="text-align:center; padding: 24px; color: var(--neutral-400);">No members in this course yet.</td></tr>`
+            }
           </tbody>
         </table>
       </div>
 
-      <!-- Invite form -->
+      <!-- Add member form -->
       <div class="card">
-        <div class="card-title">Invite someone</div>
-        <div class="form-group">
-          <label class="form-label" for="invite-email">Email address</label>
-          <input type="email" id="invite-email" placeholder="colleague@university.edu">
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="invite-role">Role</label>
-          <select id="invite-role">
-            <option value="ta">Teaching Assistant</option>
-            <option value="instructor">Instructor</option>
-          </select>
-        </div>
-        <button class="btn btn-primary" style="width:100%" id="invite-btn">
-          <i class="ti ti-send" aria-hidden="true"></i> Send invite
-        </button>
+        <div class="card-title">Add member to course</div>
+        ${assignableUsers.length > 0 ? `
+          <div class="form-group">
+            <label class="form-label" for="add-member-user">Select registered user</label>
+            <select id="add-member-user" style="width:100%; padding:8px; border-radius:var(--radius-sm); border:1px solid var(--neutral-200);">
+              ${assignableUsers.map(u => `<option value="${u.id}">${u.name} (${u.email})</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="add-member-role">Role</label>
+            <select id="add-member-role" style="width:100%; padding:8px; border-radius:var(--radius-sm); border:1px solid var(--neutral-200);">
+              <option value="ta">Teaching Assistant (TA)</option>
+              <option value="instructor">Instructor</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" style="width:100%" id="add-member-btn">
+            <i class="ti ti-plus" aria-hidden="true"></i> Add to Course
+          </button>
+        ` : `
+          <p style="color:var(--neutral-600); font-size:var(--text-sm); line-height: 1.5;">
+            No other registered users are available to add. All registered users are already members of this course.
+          </p>
+          <p style="color:var(--neutral-400); font-size:var(--text-xs); margin-top: 10px;">
+            To add new TAs or Instructors, they must first sign up / register an account on the platform.
+          </p>
+        `}
       </div>
     </div>`;
 
-  bindEvents(container);
+  bindEvents(container, courseId);
 }
 
-function bindEvents(container) {
+function bindEvents(container, courseId) {
   container.querySelectorAll('[data-toggle-role]').forEach(btn => {
     btn.addEventListener('click', async () => {
-      await toggleUserRole(btn.dataset.toggleRole);
-      showToast('Role updated');
-      render(container);
+      try {
+        await toggleCourseMemberRole(courseId, btn.dataset.toggleRole);
+        showToast('Role updated');
+        render(container);
+      } catch (err) {
+        showToast(err.message || 'Failed to update role', 'error');
+      }
     });
   });
 
   container.querySelectorAll('[data-remove-user]').forEach(btn => {
     btn.addEventListener('click', async () => {
       if (!confirm('Remove this member from the course?')) return;
-      await removeUser(btn.dataset.removeUser);
-      showToast('Member removed');
-      render(container);
+      try {
+        await removeCourseMember(courseId, btn.dataset.removeUser);
+        showToast('Member removed');
+        render(container);
+      } catch (err) {
+        showToast(err.message || 'Failed to remove member', 'error');
+      }
     });
   });
 
-  container.querySelector('#invite-btn').addEventListener('click', async () => {
-    const email = container.querySelector('#invite-email')?.value?.trim();
-    const role  = container.querySelector('#invite-role')?.value;
-    if (!email) { showToast('Enter an email address', 'error'); return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showToast('Enter a valid email', 'error'); return; }
-    await inviteUser({ email, role });
-    showToast(`Invite sent to ${email}`);
-    render(container);
-  });
+  const addBtn = container.querySelector('#add-member-btn');
+  if (addBtn) {
+    addBtn.addEventListener('click', async () => {
+      const userId = container.querySelector('#add-member-user').value;
+      const role   = container.querySelector('#add-member-role').value;
+      
+      addBtn.disabled = true;
+      try {
+        await addCourseMember(courseId, { userId, role });
+        showToast('Member added successfully');
+        render(container);
+      } catch (err) {
+        showToast(err.message || 'Failed to add member', 'error');
+        addBtn.disabled = false;
+      }
+    });
+  }
 }
 
 function userRow(u) {
@@ -107,10 +167,9 @@ function userRow(u) {
           <button class="btn btn-sm" data-toggle-role="${u.id}" title="Toggle role">
             <i class="ti ti-switch-horizontal" aria-hidden="true"></i>
           </button>
-          ${!isInstructor ? `
           <button class="btn btn-sm btn-icon btn-danger" data-remove-user="${u.id}" title="Remove">
             <i class="ti ti-trash" aria-hidden="true"></i>
-          </button>` : ''}
+          </button>
         </div>
       </td>
     </tr>`;

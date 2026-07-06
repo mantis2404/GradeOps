@@ -69,7 +69,10 @@ function bindEvents(container) {
     btn.disabled = true;
     try {
       const course = await createCourse({ name, code });
-      if (!store.selectedCourseId) store.selectedCourseId = course.id;
+      if (!store.selectedCourseId) {
+        store.selectedCourseId = course.id;
+        localStorage.setItem('selectedCourseId', course.id);
+      }
       showToast('Course created');
       await updateHeader();
       render(container);
@@ -82,9 +85,9 @@ function bindEvents(container) {
   container.querySelectorAll('[data-select-course]').forEach(btn => {
     btn.addEventListener('click', async () => {
       store.selectedCourseId = btn.dataset.selectCourse;
+      localStorage.setItem('selectedCourseId', btn.dataset.selectCourse);
       showToast('Active course updated');
-      await updateHeader();
-      render(container);
+      window.location.reload();
     });
   });
 
@@ -98,9 +101,10 @@ function bindEvents(container) {
         showToast('Course deleted');
         if (store.selectedCourseId === courseId) {
           store.selectedCourseId = null;
+          window.location.reload();
+        } else {
+          render(container);
         }
-        await updateHeader();
-        render(container);
       } catch (err) {
         showToast('Failed to delete course', 'error');
       }

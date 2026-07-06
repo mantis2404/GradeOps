@@ -11,6 +11,7 @@ import { navigate } from '../router.js';
 import { showToast } from '../components/toast.js';
 import { store } from '../state.js';
 import { getCourses } from '../api/courses.js';
+import { getAuthHeaders } from '../api/auth.js';
 
 // Use the current origin as the API base if we're not on the default dev port (3000)
 const API_BASE = window.location.port === '3000' ? 'http://localhost:8000' : '';
@@ -106,7 +107,9 @@ export async function render(container) {
         btn.disabled = true;
         btn.innerHTML = '<i class="ti ti-loader-2 ti-spin" aria-hidden="true"></i>';
 
-        const res = await fetch(`${API_BASE}/pipeline/${examId}/export/csv`);
+        const res = await fetch(`${API_BASE}/pipeline/${examId}/export/csv`, {
+          headers: getAuthHeaders()
+        });
         if (!res.ok) {
           const err = await res.json().catch(() => ({ detail: res.statusText }));
           throw new Error(err.detail ?? 'Export failed');

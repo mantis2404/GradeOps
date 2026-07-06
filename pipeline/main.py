@@ -30,7 +30,6 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--rubric",       required=True, help="Path to rubric JSON file")
     p.add_argument("--pdf",          required=True, help="Path to exam PDF")
     p.add_argument("--exam-id",      default=None,  help="Optional exam ID (auto-generated if omitted)")
-    p.add_argument("--mock",         action="store_true", help="Use mock LLM responses (no API key needed)")
     p.add_argument("--auto-approve", action="store_true", help="Approve all AI grades without prompting")
     return p.parse_args()
 
@@ -106,7 +105,6 @@ def run_pipeline(rubric_path: str, pdf_path: str, exam_id: str | None, auto_appr
     print(f"\n[pipeline] Starting — exam: {thread_id}")
     print(f"[pipeline] Rubric:   {rubric_path}")
     print(f"[pipeline] PDF:      {pdf_path}")
-    print(f"[pipeline] Mock LLM: {os.environ.get('MOCK_LLM', 'false')}")
 
     # Stream events from the graph; collect the final state
     last_state = {}
@@ -159,9 +157,6 @@ def run_pipeline(rubric_path: str, pdf_path: str, exam_id: str | None, auto_appr
 
 def main():
     args = parse_args()
-
-    if args.mock:
-        os.environ["MOCK_LLM"] = "true"
 
     run_pipeline(
         rubric_path=args.rubric,

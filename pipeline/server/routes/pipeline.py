@@ -23,9 +23,9 @@ from fastapi.responses import StreamingResponse, Response
 
 from pipeline.config import settings
 from pipeline.graph import graph
-from pipeline.server.routes.metadata import register_exam, ExamMetadata
+from pipeline.server.routes.metadata import register_exam, ExamMetadata, verify_course_membership
 from pipeline.server.db import get_db
-from pipeline.server.routes.auth import check_role, UserOut
+from pipeline.server.routes.auth import check_role, UserOut, get_current_user
 from pipeline.tools.storage import get_storage
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
@@ -94,22 +94,17 @@ async def start_pipeline(
     course_id:  str | None = Form(default=None,  description="Course ID to associate"),
     exam_id:    str | None = Form(default=None,  description="Optional exam ID"),
     name:       str | None = Form(default=None,  description="Custom name for the exam"),
-    mock:       bool       = Form(default=False, description="Use mock LLM responses"),
     current_user: UserOut = Depends(check_role("instructor")),
 ):
+    if not course_id:
+        raise HTTPException(status_code=400, detail="course_id is required to start a grading pipeline")
+    await verify_course_membership(course_id, current_user.id, required_role="instructor")
     """
     Upload a PDF and kick off the grading pipeline.
 
     If rubric_id is provided, it uses a saved rubric from /metadata/rubrics.
     Otherwise, a new rubric file must be uploaded.
     """
-    if mock:
-        os.environ["MOCK_LLM"] = "true"
-        settings.mock_llm = True
-    else:
-        os.environ.pop("MOCK_LLM", None)
-        settings.mock_llm = False
-
     eid = exam_id or f"exam_{uuid.uuid4().hex[:8]}"
     exam_name = name or f"Exam {eid[-8:]}"
     storage = get_storage()
@@ -175,7 +170,7 @@ async def start_pipeline(
         rubric=rubric_name,
         uploaded=datetime.now().strftime("%b %d, %Y"),
         status="processing"
-    ))
+    ), current_user=current_user)
 
     # ── Run pipeline in thread pool (non-blocking) ────────────────────────────
     loop = asyncio.get_event_loop()
@@ -185,7 +180,7 @@ async def start_pipeline(
 
 
 @router.get("/{exam_id}")
-async def get_pipeline_state(exam_id: str):
+async def get_pipeline_state(exam_id: str, current_user: UserOut = Depends(get_current_user)):
     """
     Return the current pipeline state for an exam, pulling from MongoDB
     to ensure persistence across server restarts and after completion.
@@ -196,6 +191,10 @@ async def get_pipeline_state(exam_id: str):
     exam_meta = await db.exams.find_one({"id": exam_id})
     if not exam_meta:
         raise HTTPException(status_code=404, detail="Exam not found")
+        
+    course_id = exam_meta.get("courseId")
+    if course_id:
+        await verify_course_membership(course_id, current_user.id)
     
     current_status = exam_meta.get("status", "unknown")
     
@@ -274,10 +273,18 @@ async def get_pipeline_state(exam_id: str):
 
 
 @router.get("/{exam_id}/export/csv")
-async def export_gradebook_csv(exam_id: str):
+async def export_gradebook_csv(exam_id: str, current_user: UserOut = Depends(get_current_user)):
     """
     Download the final gradebook for an exam as a CSV file.
     """
+    db = get_db()
+    exam_meta = await db.exams.find_one({"id": exam_id})
+    if not exam_meta:
+        raise HTTPException(status_code=404, detail="Exam not found")
+    course_id = exam_meta.get("courseId")
+    if course_id:
+        await verify_course_membership(course_id, current_user.id)
+
     storage = get_storage()
     try:
         gradebook_data = storage.read(f"{exam_id}/gradebook.json")
@@ -350,10 +357,18 @@ async def export_gradebook_csv(exam_id: str):
 
 
 @router.get("/{exam_id}/export/json")
-async def export_gradebook_json(exam_id: str):
+async def export_gradebook_json(exam_id: str, current_user: UserOut = Depends(get_current_user)):
     """
     Download the raw gradebook JSON produced by the finalize agent.
     """
+    db = get_db()
+    exam_meta = await db.exams.find_one({"id": exam_id})
+    if not exam_meta:
+        raise HTTPException(status_code=404, detail="Exam not found")
+    course_id = exam_meta.get("courseId")
+    if course_id:
+        await verify_course_membership(course_id, current_user.id)
+
     storage = get_storage()
     try:
         content = storage.read(f"{exam_id}/gradebook.json")

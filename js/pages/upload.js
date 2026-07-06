@@ -111,12 +111,7 @@ export async function render(container) {
           </div>
         </div>
 
-        <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px">
-          <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);cursor:pointer">
-            <input type="checkbox" id="mock-mode" style="width:16px;height:16px">
-            Mock mode <span style="color:var(--neutral-400)">(no API key needed)</span>
-          </label>
-        </div>
+
 
         <button class="btn btn-primary" style="width:100%" id="submit-btn">
           <i class="ti ti-send" aria-hidden="true"></i> Submit for grading
@@ -257,7 +252,6 @@ async function handleSubmit(container) {
     return;
   }
 
-  const mockMode = container.querySelector('#mock-mode')?.checked ?? false;
   const examName = container.querySelector('#exam-name')?.value?.trim() || '';
   const btn      = container.querySelector('#submit-btn');
   btn.disabled   = true;
@@ -270,7 +264,6 @@ async function handleSubmit(container) {
       pdfFile, 
       rubricId === 'upload' ? rubricFile : null, 
       null, 
-      mockMode,
       rubricId === 'upload' ? null : rubricId,
       courseId,
       examName
@@ -296,7 +289,7 @@ async function handleSubmit(container) {
 
     // Start polling
     let progress = 40;
-    const steps  = ['Running OCR on handwritten pages…', 'AI grading in progress…', 'Waiting for TA review…'];
+    const steps  = ['Running OCR on handwritten pages…', 'AI grading in progress…'];
     let stepIdx  = 0;
 
     pollTimer = setInterval(async () => {

@@ -17,11 +17,14 @@ the race condition that existed when the frontend had to call render() again.
 from __future__ import annotations
 from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from langgraph.types import Command
 from pydantic import BaseModel, Field
 
 from pipeline.graph import graph
+from pipeline.server.db import get_db
+from pipeline.server.routes.auth import get_current_user, UserOut
+from pipeline.server.routes.metadata import verify_course_membership
 
 router = APIRouter(prefix="/review", tags=["review"])
 
@@ -67,10 +70,17 @@ def _build_resume_value(req: DecisionRequest) -> Any:
 
 
 @router.post("/{exam_id}/decide")
-async def submit_decision(exam_id: str, body: DecisionRequest):
+async def submit_decision(exam_id: str, body: DecisionRequest, current_user: UserOut = Depends(get_current_user)):
     """
     Submit a TA decision for the currently pending review in an exam.
     """
+    db = get_db()
+    exam_meta = await db.exams.find_one({"id": exam_id})
+    if exam_meta:
+        course_id = exam_meta.get("courseId")
+        if course_id:
+            await verify_course_membership(course_id, current_user.id, required_role="ta")
+
     # Check that the exam exists and has a pending interrupt
     snapshot = graph.get_state(_config(exam_id))
     if not snapshot:
@@ -99,4 +109,4 @@ async def submit_decision(exam_id: str, body: DecisionRequest):
     await loop.run_in_executor(_executor, _resume_graph_sync, cmd, exam_id)
 
     # ── Return the unified state shape ────────────────────────────────────────
-    return await get_pipeline_state(exam_id)
+    return await get_pipeline_state(exam_id, current_user=current_user)

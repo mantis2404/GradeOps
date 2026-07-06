@@ -56,45 +56,7 @@ def _build_grading_prompt(rubric: RubricSchema, transcript: str) -> str:
     )
 
 
-# ── Mock responses ────────────────────────────────────────────────────────────
 
-def _mock_grade(rubric: RubricSchema, student_id: str) -> GradeOutput:
-    """Deterministic mock grade — incrementally varies score per student."""
-    import hashlib
-    seed = int(hashlib.md5(student_id.encode()).hexdigest()[:4], 16)
-
-    question_grades = []
-    for q in rubric.questions:
-        ratio = 0.6 + (seed % 30) / 100
-        awarded = round(q.max_marks * ratio, 1)
-        met = [c.text for c in q.criteria[:max(1, len(q.criteria) - 1)]]
-        question_grades.append(QuestionGrade(
-            question_id=q.id,
-            score=awarded,
-            max_score=q.max_marks,
-            criteria_met=met,
-            justification=(
-                f"[MOCK] Student demonstrated understanding of {q.text}. "
-                f"Most criteria were met ({len(met)}/{len(q.criteria)})."
-            ),
-        ))
-
-    return GradeOutput(
-        question_grades=question_grades,
-        overall_justification=f"[MOCK] {student_id} shows solid understanding overall.",
-    )
-
-
-def _mock_embeddings(transcripts: list[str]) -> list[list[float]]:
-    """Return pseudo-random embeddings based on transcript content."""
-    import hashlib, math
-    vectors = []
-    for t in transcripts:
-        h = hashlib.md5(t.encode()).digest()
-        vec = [(b - 128) / 128 for b in h] * 24  # 384-dim pseudo-random
-        norm = math.sqrt(sum(x * x for x in vec)) or 1
-        vectors.append([x / norm for x in vec])
-    return vectors
 
 
 # ── Retry decorator ───────────────────────────────────────────────────────────
@@ -213,23 +175,20 @@ def grading_agent(state: ExamGradingState) -> dict:
     students: list[StudentRecord] = list(state["students"])
 
     # ── Sub-step A: Grade each student ───────────────────────────────────────
-    if settings.mock_llm:
-        grade_results = [_mock_grade(rubric, s["student_id"]) for s in students]
-    else:
-        llm           = _build_grading_llm()
-        grading_chain = llm.with_structured_output(GradeOutput)
+    llm           = _build_grading_llm()
+    grading_chain = llm.with_structured_output(GradeOutput)
 
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_closed():
-                raise RuntimeError
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            raise RuntimeError
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
 
-        grade_results = loop.run_until_complete(
-            _run_all_grading(students, rubric, grading_chain)
-        )
+    grade_results = loop.run_until_complete(
+        _run_all_grading(students, rubric, grading_chain)
+    )
 
     for student, grade in zip(students, grade_results):
         student["grade_output"] = grade.model_dump()
@@ -238,19 +197,16 @@ def grading_agent(state: ExamGradingState) -> dict:
     transcripts = [s["transcript"] or "" for s in students]
     student_ids = [s["student_id"] for s in students]
 
-    if settings.mock_llm:
-        embeddings = _mock_embeddings(transcripts)
-    else:
-        from langchain_google_genai import GoogleGenerativeAIEmbeddings
-        embed_model = GoogleGenerativeAIEmbeddings(
-            model=settings.embedding_model,
-            google_api_key=settings.google_api_key,
-        )
-        try:
-            embeddings = embed_model.embed_documents(transcripts)
-        except Exception as exc:
-            print(f"[grading] API Error during embeddings: {exc}")
-            embeddings = [[0.0] * 768 for _ in transcripts]
+    from langchain_google_genai import GoogleGenerativeAIEmbeddings
+    embed_model = GoogleGenerativeAIEmbeddings(
+        model=settings.embedding_model,
+        google_api_key=settings.google_api_key,
+    )
+    try:
+        embeddings = embed_model.embed_documents(transcripts)
+    except Exception as exc:
+        print(f"[grading] API Error during embeddings: {exc}")
+        embeddings = [[0.0] * 768 for _ in transcripts]
 
     flags    = find_suspicious_pairs(student_ids, embeddings, settings.plagiarism_threshold)
     flag_map = build_student_flag_map(flags)
